@@ -1,0 +1,15 @@
+# FastAPI - Modern, fast web framework for building APIs with Python
+fastapi
+
+# Uvicorn - ASGI server for running FastAPI applications
+# [standard] includes additional dependencies for production use
+uvicorn[standard]
+
+# yfinance - Yahoo Finance data downloader for stock market data
+yfinance
+
+# pandas - Data manipulation and analysis library for Python
+pandas
+
+# python-multipart - Handles form data and file uploads in FastAPI
+python-multipart

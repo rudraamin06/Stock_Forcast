@@ -1,0 +1,46 @@
+<!doctype html>
+<!--
+  Stock Forecast Application - Main HTML Entry Point
+  =================================================
+  
+  This HTML file serves as the entry point for the React application.
+  It provides the basic HTML structure and loads the JavaScript bundle
+  that contains the React application.
+  
+  Key Elements:
+  - HTML5 doctype declaration
+  - Meta tags for proper rendering and character encoding
+  - Viewport meta tag for responsive design
+  - Root div element where React mounts the application
+  - Script tag that loads the main TypeScript entry point
+  
+  The application is a Single Page Application (SPA) where all content
+  is dynamically rendered by React into the #root div element.
+-->
+
+<html lang="en">
+  <head>
+    <!-- Character encoding for proper text rendering -->
+    <meta charset="UTF-8" />
+    
+    <!-- Favicon for the browser tab -->
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    
+    <!-- Viewport meta tag for responsive design on mobile devices -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    
+    <!-- Page title shown in browser tab -->
+    <title>Stock Forecast - Real-time Stock Data & Analysis</title>
+  </head>
+  
+  <body>
+    <!-- Root container where React will mount the entire application -->
+    <!-- This div is empty initially and gets populated by React -->
+    <div id="root"></div>
+    
+    <!-- Script tag that loads the main application entry point -->
+    <!-- type="module" enables ES6 module syntax -->
+    <!-- The path points to the TypeScript source file that gets compiled -->
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
