@@ -2,6 +2,22 @@
 
 A full-stack web application for real-time and historical stock market data visualization and analysis. Built with FastAPI (Python) for the backend and React + TypeScript + Vite for the frontend.
 
+## Technologies Used
+
+<p>
+  <a href="https://fastapi.tiangolo.com/" target="_blank"><img src="https://img.shields.io/badge/FastAPI-005571?logo=fastapi&logoColor=white&style=for-the-badge" alt="FastAPI"></a>
+  <a href="https://react.dev/" target="_blank"><img src="https://img.shields.io/badge/React-20232A?logo=react&logoColor=61DAFB&style=for-the-badge" alt="React"></a>
+  <a href="https://www.typescriptlang.org/" target="_blank"><img src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white&style=for-the-badge" alt="TypeScript"></a>
+  <a href="https://vitejs.dev/" target="_blank"><img src="https://img.shields.io/badge/Vite-646CFF?logo=vite&logoColor=FFD62E&style=for-the-badge" alt="Vite"></a>
+  <a href="https://yfinance.readthedocs.io/" target="_blank"><img src="https://img.shields.io/badge/yfinance-00A86B?logo=python&logoColor=white&style=for-the-badge" alt="yfinance"></a>
+  <a href="https://pandas.pydata.org/" target="_blank"><img src="https://img.shields.io/badge/pandas-150458?logo=pandas&logoColor=white&style=for-the-badge" alt="pandas"></a>
+  <a href="https://axios-http.com/" target="_blank"><img src="https://img.shields.io/badge/Axios-5A29E4?logo=axios&logoColor=white&style=for-the-badge" alt="Axios"></a>
+  <a href="https://recharts.org/" target="_blank"><img src="https://img.shields.io/badge/Recharts-FF7300?logo=recharts&logoColor=white&style=for-the-badge" alt="Recharts"></a>
+  <a href="https://date-fns.org/" target="_blank"><img src="https://img.shields.io/badge/date--fns-007ACC?logo=date-fns&logoColor=white&style=for-the-badge" alt="date-fns"></a>
+  <a href="https://eslint.org/" target="_blank"><img src="https://img.shields.io/badge/ESLint-4B32C3?logo=eslint&logoColor=white&style=for-the-badge" alt="ESLint"></a>
+  <a href="https://uvicorn.org/" target="_blank"><img src="https://img.shields.io/badge/Uvicorn-000000?logo=python&logoColor=white&style=for-the-badge" alt="Uvicorn"></a>
+</p>
+
 ## Features
 
 - **Historical Stock Data:** View price history for major stocks across multiple timeframes (1D, 1W, 1M, 1Y, etc.).
@@ -72,29 +88,6 @@ Stock_Forcast/
 - `GET /intraday?ticker=SYMBOL&interval=INTERVAL`  
   Fetch intraday data with custom intervals.  
   - `interval`: 1m, 2m, 5m, 15m, 30m, 1h, 1d, etc.
-
-## Configuration
-
-- **CORS:** The backend allows requests from the frontend dev server (`localhost:5173`).
-- **Environment:** No environment variables required for local development.
-
-## Dependencies
-
-### Backend
-- FastAPI
-- Uvicorn
-- yfinance
-- pandas
-- python-multipart
-
-### Frontend
-- React
-- TypeScript
-- Vite
-- Axios
-- Recharts
-- date-fns
-- ESLint
 
 ## License
 
