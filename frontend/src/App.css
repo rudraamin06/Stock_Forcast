@@ -8,6 +8,221 @@
   color: #1e2124;
 }
 
+/* Search Bar Styles */
+.search-container {
+  position: relative;
+  width: 100%;
+  max-width: 300px;
+  margin: 20px auto;
+}
+
+.search-input {
+  width: 100%;
+  padding: 10px 15px;
+  font-size: 16px;
+  border: 2px solid #e1e4e8;
+  border-radius: 6px;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.search-input:focus {
+  border-color: #f7f7f7;
+}
+
+.suggestions-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #ffffff;
+  border: 1px solid #e1e4e8;
+  border-radius: 6px;
+  margin-top: 4px;
+  padding: 0;
+  list-style: none;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.suggestion-item {
+  padding: 8px 15px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.suggestion-item:hover {
+  background-color: #f6f8fa;
+}
+
+.no-data-message {
+  text-align: center;
+  margin: 40px 0;
+  color: #586069;
+  font-size: 18px;
+}
+
+/* Prediction Panel Styles */
+.prediction-panel {
+  margin-top: 30px;
+  padding: 20px;
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.prediction-panel h2 {
+  margin: 0 0 20px;
+  color: #24292e;
+  font-size: 1.5em;
+}
+
+.prediction-input {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.prediction-input label {
+  font-weight: 500;
+}
+
+.prediction-input input[type="date"] {
+  padding: 8px 12px;
+  border: 1px solid #e1e4e8;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.predict-button {
+  padding: 8px 16px;
+  background-color: #2ea44f;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.predict-button:hover {
+  background-color: #2c974b;
+}
+
+.predict-button:disabled {
+  background-color: #94d3a2;
+  cursor: not-allowed;
+}
+
+.prediction-results {
+  padding: 20px;
+  background: #f6f8fa;
+  border-radius: 6px;
+}
+
+.current-price-info, .median-prediction {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  font-size: 1.1em;
+}
+
+.price {
+  font-weight: bold;
+  color: #24292e;
+}
+
+.confidence-intervals {
+  margin: 20px 0;
+}
+
+.interval {
+  display: flex;
+  justify-content: space-between;
+  margin: 10px 0;
+  padding: 8px;
+  background: white;
+  border-radius: 4px;
+}
+
+.range {
+  color: #0366d6;
+  font-weight: 500;
+}
+
+.probability {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 15px;
+  padding: 10px;
+  background: white;
+  border-radius: 4px;
+}
+
+.percentage {
+  font-weight: bold;
+  color: #28a745;
+}
+
+/* Prediction Visualization */
+.prediction-visualization {
+  margin-top: 30px;
+}
+
+.price-range {
+  position: relative;
+  height: 60px;
+  margin: 20px 0;
+}
+
+.range-95 {
+  position: relative;
+  height: 20px;
+  background: #edf7ed;
+  border-radius: 10px;
+}
+
+.range-80 {
+  position: absolute;
+  top: 25%;
+  height: 50%;
+  left: 10%;
+  right: 10%;
+  background: #c2e0c6;
+  border-radius: 5px;
+}
+
+.median-line {
+  position: absolute;
+  left: 50%;
+  top: -10px;
+  bottom: -10px;
+  width: 2px;
+  background: #28a745;
+}
+
+.current-line {
+  position: absolute;
+  left: calc((var(--current-price) - var(--min-price)) / (var(--max-price) - var(--min-price)) * 100%);
+  top: -10px;
+  bottom: -10px;
+  width: 2px;
+  background: #0366d6;
+}
+
+.range-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+  color: #586069;
+  font-size: 0.9em;
+}
+
 .header {
   text-align: center;
   margin-bottom: 40px;

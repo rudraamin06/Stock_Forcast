@@ -12,6 +12,7 @@
  * - Multiple timeframe selection (1D, 1W, 1M, 1Y, etc.)
  * - Stock performance color coding (green for gains, red for losses)
  * - Responsive design for different screen sizes
+ * - Price predictions with confidence intervals
  * 
  * Dependencies:
  * - React: UI framework
@@ -24,6 +25,8 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import axios from 'axios'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { format } from 'date-fns'
+import SearchBar from './components/SearchBar'
+import PredictionPanel from './components/PredictionPanel'
 import './App.css'
 
 /**
@@ -67,7 +70,7 @@ const timeframes = [
 function App() {
   // State management for the application
   const [stockData, setStockData] = useState<StockData | null>(null)  // Current stock data from API
-  const [ticker, setTicker] = useState('AAPL')                        // Current stock symbol (default: Apple)
+  const [ticker, setTicker] = useState<string | null>(null)           // Current stock symbol (null by default)
   const [period, setPeriod] = useState('1d')                          // Current time period (default: 1 day)
   const [loading, setLoading] = useState(false)                       // Loading state for API calls
   const [error, setError] = useState('')                              // Error message if API call fails
@@ -82,6 +85,8 @@ function App() {
    * Updates the application state with new data or error messages
    */
   const fetchStockData = async () => {
+    if (!ticker) return;  // Don't fetch if no ticker is selected
+    
     setLoading(true)        // Show loading state
     setError('')            // Clear any previous errors
     try {
@@ -254,29 +259,8 @@ function App() {
         <p>Real-time stock price data and analysis</p>
       </header>
 
-      {/* User input controls for stock ticker and data refresh */}
-      <div className="controls">
-        <div className="input-group">
-          <label htmlFor="ticker">Stock Ticker:</label>
-          <input
-            id="ticker"
-            type="text"
-            value={ticker}
-            onChange={(e) => setTicker(e.target.value.toUpperCase())}  // Convert to uppercase
-            placeholder="e.g., AAPL"
-            maxLength={5}  // Limit to 5 characters for stock symbols
-          />
-        </div>
-
-        {/* Manual refresh button for fetching latest data */}
-        <button 
-          onClick={fetchStockData} 
-          disabled={loading}
-          className="fetch-button"
-        >
-          {loading ? 'Loading...' : 'Refresh Data'}
-        </button>
-      </div>
+      {/* SearchBar component for stock selection */}
+      <SearchBar onSelect={setTicker} />
 
       {/* Error display area */}
       {error && (
@@ -285,8 +269,26 @@ function App() {
         </div>
       )}
 
+      {/* No data message when no ticker is selected */}
+      {!ticker && (
+        <div className="no-data-message">
+          <p>Enter a stock ticker above to view its data</p>
+        </div>
+      )}
+
+      {/* Manual refresh button - only shown when a ticker is selected */}
+      {ticker && (
+        <button 
+          onClick={fetchStockData} 
+          disabled={loading}
+          className="fetch-button"
+        >
+          {loading ? 'Loading...' : 'Refresh Data'}
+        </button>
+      )}
+
       {/* Main chart container - only shown when data is available */}
-      {stockData && !loading && (
+      {stockData && !loading && ticker && (
         <div className="chart-container">
           {/* Price header showing current price, ticker, and data info */}
           <div className="price-header">
@@ -358,6 +360,9 @@ function App() {
           </div>
         </div>
       )}
+
+      {/* Add PredictionPanel when a ticker is selected */}
+      {ticker && <PredictionPanel ticker={ticker} />}
     </div>
   )
 }

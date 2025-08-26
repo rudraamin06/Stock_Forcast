@@ -1,0 +1,860 @@
+"""
+Simple Momentum-Based Stock Predictor
+===================================
+
+A straightforward momentum-based prediction strategy using recent price changes
+and basic moving averages.
+"""
+
+import pandas as pd
+import numpy as np
+from typing import Dict
+
+class PredictionBacktester:
+    def __init__(self, historical_data: pd.DataFrame):
+        """Initialize with historical price data."""
+        self.data = historical_data.copy()
+        
+        # Ensure datetime index
+        if not isinstance(self.data.index, pd.DatetimeIndex):
+            if 'date' in self.data.columns:
+                self.data.set_index('date', inplace=True)
+            self.data.index = pd.to_datetime(self.data.index)
+        
+        self.data.sort_index(inplace=True)
+        self._prepare_data()
+        
+    def _prepare_data(self):
+        """Calculate basic price data and indicators."""
+        # Calculate returns and moving average
+        self.data['returns'] = self.data['close'].pct_change()
+        self.data['MA50'] = self.data['close'].rolling(window=50).mean()
+        
+        # Calculate 20-day momentum
+        self.data['momentum'] = self.data['close'].pct_change(periods=20)
+        
+        # Simple volatility measure
+        self.data['volatility'] = self.data['returns'].rolling(window=20).std()
+        
+        # Clean up NaN values
+        self.data.dropna(inplace=True)
+        
+    def _make_prediction(self, data: pd.DataFrame, horizon: int) -> float:
+        """Make a price prediction based on momentum and moving average."""
+        current_price = data['close'].iloc[-1]
+        momentum = data['momentum'].iloc[-1]
+        current_ma = data['MA50'].iloc[-1]
+        volatility = data['volatility'].iloc[-1]
+        
+        # Print current conditions for debugging
+        print(f"\nMaking prediction with {len(data)} days of data")
+        print(f"Date range: {data.index[0].strftime('%Y-%m-%d')} to {data.index[-1].strftime('%Y-%m-%d')}")
+        print(f"\nCurrent Market Conditions:")
+        print(f"Current Price: ${current_price:.2f}")
+        print(f"50-day MA: ${current_ma:.2f}")
+        print(f"20-day Momentum: {momentum*100:.2f}%")
+        print(f"20-day Volatility: {volatility*100:.2f}%")
+        
+        # Calculate prediction effects
+        momentum_effect = momentum * np.sqrt(horizon/20)  # Scale with time
+        ma_diff = (current_price - current_ma) / current_ma
+        mean_reversion = -ma_diff * 0.1 * horizon  # Pull toward MA
+        
+        # Combine and adjust for volatility
+        total_effect = (momentum_effect + mean_reversion) * (1 + volatility)
+        predicted_price = current_price * (1 + total_effect)
+        
+        return predicted_price
+        
+    def backtest_prediction(self, start_date: str, end_date: str, prediction_horizon: int) -> Dict:
+        """Run backtesting over a specified date range."""
+        test_data = self.data[start_date:end_date]
+        predictions = []
+        actuals = []
+        
+        # Generate predictions
+        for i in range(len(test_data) - prediction_horizon):
+            current_data = self.data[:test_data.index[i]]
+            pred = self._make_prediction(current_data, prediction_horizon)
+            actual = test_data['close'].iloc[i + prediction_horizon]
+            predictions.append(pred)
+            actuals.append(actual)
+        
+        # Calculate metrics
+        errors = np.array([(p - a)/a for p, a in zip(predictions, actuals)])
+        mape = np.mean(np.abs(errors)) * 100
+        rmse = np.sqrt(np.mean((np.array(predictions) - np.array(actuals))**2))
+        
+        # Calculate directional accuracy
+        actual_moves = np.diff([test_data['close'].iloc[i] for i in range(len(predictions) + 1)])
+        pred_moves = np.array(predictions) - test_data['close'].iloc[:-prediction_horizon]
+        directional_accuracy = np.mean(np.sign(actual_moves) == np.sign(pred_moves)) * 100
+        
+        return {
+            'mape': mape,
+            'rmse': rmse,
+            'directional_accuracy': directional_accuracy,
+            'n_predictions': len(predictions),
+            'date_range': f"{test_data.index[0].strftime('%Y-%m-%d')} to {test_data.index[-1].strftime('%Y-%m-%d')}"
+        }        # Moving averages
+        for period in [5, 10, 20, 50]:
+            self.data[f'SMA_{period}'] = self.data['close'].rolling(window=period).mean()
+            self.data[f'EMA_{period}'] = self.data['close'].ewm(span=period, adjust=False).mean()
+        
+        # Volatility indicators
+        self.data['volatility_20'] = self.data['returns'].rolling(window=20).std()
+        self.data['volatility_50'] = self.data['returns'].rolling(window=50).std()
+        
+        # Momentum indicators
+        self.data['RSI'] = self._calculate_rsi(self.data['close'], period=14)
+        macd, signal = self._calculate_macd(self.data)
+        self.data['MACD'] = macd
+        self.data['Signal_Line'] = signal
+        
+        # Volume indicators
+        self.data['OBV'] = self._calculate_obv(self.data['close'], self.data['volume'])
+        
+        # Trend strength
+        self.data['ADX'] = self._calculate_adx(self.data, period=14)
+        
+        # Volatility indicator - ATR
+        self.data['ATR'] = self._calculate_atr(self.data, period=14)
+        
+        # Forward fill NaN values in indicators
+        self.data = self.data.ffill()
+        # Backward fill any remaining NaNs at the start
+        self.data = self.data.bfill()
+        
+        # Log the shape of the data after preprocessing
+        print(f"Data shape after preprocessing: {self.data.shape}")
+        print(f"Available columns: {list(self.data.columns)}")
+        print(f"Date range: {self.data.index[0]} to {self.data.index[-1]}")
+
+    def _calculate_rsi(self, prices: pd.Series, period: int = 14) -> pd.Series:
+        """Calculate Relative Strength Index."""
+        delta = prices.diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+        rs = gain / loss
+        return 100 - (100 / (1 + rs))
+
+    def _calculate_atr(self, data: pd.DataFrame, period: int = 14) -> pd.Series:
+        """
+        Calculate Average True Range (ATR) for volatility measurement.
+        
+        Args:
+            data: DataFrame with high, low, close prices
+            period: Period for ATR calculation
+            
+        Returns:
+            pd.Series: ATR values
+        """
+        high = data['high']
+        low = data['low']
+        close = data['close']
+        
+        tr1 = high - low
+        tr2 = abs(high - close.shift())
+        tr3 = abs(low - close.shift())
+        
+        tr = pd.DataFrame({'TR1': tr1, 'TR2': tr2, 'TR3': tr3}).max(axis=1)
+        atr = tr.rolling(window=period).mean()
+        return atr
+        
+    def _calculate_macd(self, df: pd.DataFrame, fast_period: int = 12, slow_period: int = 26, signal_period: int = 9) -> Tuple[pd.Series, pd.Series]:
+        """
+        Calculate Moving Average Convergence Divergence and Signal Line.
+        
+        Returns:
+            Tuple of (MACD, Signal Line)
+        """
+        exp1 = df['close'].ewm(span=fast_period, adjust=False).mean()
+        exp2 = df['close'].ewm(span=slow_period, adjust=False).mean()
+        macd = exp1 - exp2
+        signal = macd.ewm(span=signal_period, adjust=False).mean()
+        return macd, signal
+
+    def _calculate_obv(self, prices: pd.Series, volume: pd.Series) -> pd.Series:
+        """Calculate On-Balance Volume."""
+        return (np.sign(prices.diff()) * volume).cumsum()
+
+    def _calculate_adx(self, df: pd.DataFrame, period: int = 14) -> pd.Series:
+        """Calculate Average Directional Index."""
+        high = df['high']
+        low = df['low']
+        close = df['close']
+        
+        # Calculate True Range
+        tr1 = high - low
+        tr2 = abs(high - close.shift())
+        tr3 = abs(low - close.shift())
+        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+        atr = tr.rolling(period).mean()
+        
+        # Calculate Directional Movement
+        up_move = high - high.shift()
+        down_move = low.shift() - low
+        
+        plus_dm = up_move.where((up_move > down_move) & (up_move > 0), 0)
+        minus_dm = down_move.where((down_move > up_move) & (down_move > 0), 0)
+        
+        # Calculate Directional Indicators
+        plus_di = 100 * (plus_dm.rolling(period).mean() / atr)
+        minus_di = 100 * (minus_dm.rolling(period).mean() / atr)
+        
+        # Calculate ADX
+        dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di)
+        adx = dx.rolling(period).mean()
+        
+        return adx
+
+    def backtest_prediction(self, 
+                          start_date: str, 
+                          end_date: str, 
+                          prediction_horizon: int) -> Dict:
+        """
+        Backtest prediction accuracy for a specific time period.
+        
+        Args:
+            start_date: Start date for backtesting
+            end_date: End date for backtesting
+            prediction_horizon: Number of days to predict ahead
+            
+        Returns:
+            Dict containing accuracy metrics and prediction errors
+        """
+        print("\nRunning detailed backtesting analysis...")
+        # Convert string dates to pandas datetime
+        start_dt = pd.to_datetime(start_date)
+        end_dt = pd.to_datetime(end_date)
+        
+        # Get all available data up to end date to ensure we have enough history
+        min_required_days = 50  # Minimum days needed for technical indicators
+        extended_start = start_dt - pd.Timedelta(days=min_required_days)
+        test_data = self.data.loc[extended_start:end_dt].copy()
+        
+        if len(test_data) < min_required_days + prediction_horizon:
+            raise ValueError(
+                f"Insufficient data for backtesting. Need at least {min_required_days + prediction_horizon} days.\n"
+                f"Got {len(test_data)} days from {test_data.index[0].strftime('%Y-%m-%d')} "
+                f"to {test_data.index[-1].strftime('%Y-%m-%d')}"
+            )
+            
+        predictions = []
+        actuals = []
+        
+        # Use a sliding window for predictions
+        for i in range(len(test_data) - prediction_horizon - min_required_days):
+            window_end = i + min_required_days
+            prediction_window = test_data.iloc[i:window_end]
+            
+            try:
+                # Make prediction using the current window
+                predicted_price = self._make_prediction(prediction_window, prediction_horizon)
+                
+                # Get actual price from prediction_horizon days ahead
+                actual_price = test_data.iloc[window_end + prediction_horizon]['close']
+                
+                predictions.append(predicted_price)
+                actuals.append(actual_price)
+            except ValueError as e:
+                print(f"Warning: Skipping prediction at {test_data.index[window_end]} due to: {e}")
+                continue
+                
+        # Convert to numpy arrays for calculations
+        predictions = np.array(predictions)
+        actuals = np.array(actuals)
+        
+        if len(predictions) == 0:
+            raise ValueError("No valid predictions could be made during backtesting")
+            
+        # Calculate error metrics
+        mape = mean_absolute_percentage_error(actuals, predictions)
+        rmse = np.sqrt(mean_squared_error(actuals, predictions))
+        
+        # Calculate directional accuracy
+        actual_direction = np.sign(np.diff(actuals))
+        predicted_direction = np.sign(predictions[1:] - actuals[:-1])
+        directional_accuracy = np.mean(actual_direction == predicted_direction)
+        
+        # Calculate average prediction error by price range
+        price_ranges = pd.qcut(actuals, q=4)
+        range_errors = pd.DataFrame({
+            'actual': actuals,
+            'predicted': predictions,
+            'abs_error': np.abs(predictions - actuals),
+            'price_range': price_ranges
+        }).groupby('price_range')['abs_error'].mean()
+        
+        print("\nDetailed Backtesting Results:")
+        print(f"Number of predictions: {len(predictions)}")
+        print(f"MAPE: {mape:.2%}")
+        print(f"RMSE: ${rmse:.2f}")
+        print(f"Directional Accuracy: {directional_accuracy:.2%}")
+        print("\nError by Price Range:")
+        for range_label, error in range_errors.items():
+            print(f"{range_label}: ${error:.2f}")
+        
+        return {
+            'mape': mape,
+            'rmse': rmse,
+            'directional_accuracy': directional_accuracy,
+            'n_predictions': len(predictions),
+            'date_range': f"{test_data.index[0].strftime('%Y-%m-%d')} to {test_data.index[-1].strftime('%Y-%m-%d')}"
+        }
+
+    def _make_prediction(self, data: pd.DataFrame, horizon: int) -> float:
+        """
+        Make a price prediction using all available indicators.
+        
+        Args:
+            data: Historical data up to prediction point
+            horizon: Number of days to predict ahead
+            
+        Returns:
+            Predicted price
+        """
+        print(f"\nMaking prediction with {len(data)} days of data")
+        print(f"Date range: {data.index[0].strftime('%Y-%m-%d')} to {data.index[-1].strftime('%Y-%m-%d')}")
+        
+        # Debug current market conditions
+        current_price = data['close'].iloc[-1]
+        last_row = data.iloc[-1]
+        
+        print("\nCurrent Market Conditions:")
+        print(f"RSI: {last_row['RSI']:.2f}")
+        print(f"MACD: {last_row['MACD']:.2f}")
+        print(f"Signal Line: {last_row['Signal_Line']:.2f}")
+        print(f"ADX: {last_row['ADX']:.2f}")
+        print(f"5-day MA: {last_row['SMA_5']:.2f}")
+        print(f"20-day MA: {last_row['SMA_20']:.2f}")
+        
+        # Analyze recent trend
+        recent_trend = data['close'].pct_change(5).iloc[-1] * 100
+        print(f"5-day price change: {recent_trend:.2f}%")
+        
+        # Get current market conditions
+        last_row = data.iloc[-1]
+        rsi = last_row['RSI']
+        macd = last_row['MACD']
+        signal = last_row['Signal_Line']
+        adx = last_row['ADX']
+        atr = last_row['ATR']
+        
+        # Calculate base volatility metrics
+        volatility_factor = atr / current_price
+        base_daily_limit = max(0.02, volatility_factor * 1.5)  # At least 2% or 1.5x ATR-based move
+        max_daily_move = base_daily_limit  # Initialize max_daily_move
+        
+        # Calculate trend direction and strength
+        trend_direction = 1 if macd > signal else -1
+        trend_strength = min(1.0, adx / 25.0)  # Normalize ADX
+        
+        # Calculate momentum factor
+        momentum = data['returns'].tail(5).mean()
+        momentum_factor = 1.0 + (np.sign(momentum) * min(abs(momentum) * 5, 0.1))
+        
+        # Calculate base price change
+        base_change = data['returns'].tail(20).mean() * np.sqrt(horizon)  # Scale with square root of time
+        
+        # Calculate price trend using moving averages
+        short_ma = last_row['SMA_5']
+        med_ma = last_row['SMA_20']
+        price_trend = (short_ma - med_ma) / med_ma
+
+        # Apply trend adjustments with RSI confirmation
+        if trend_direction > 0 and rsi < 70:  # Uptrend and not overbought
+            trend_multiplier = 1.0 + (trend_strength * 0.5) * (1 + price_trend)
+        elif trend_direction < 0 and rsi > 30:  # Downtrend and not oversold
+            trend_multiplier = 1.0 + (trend_strength * 0.5) * (1 - price_trend)
+        else:
+            trend_multiplier = 0.5  # Reduce effect when against RSI signals
+            
+        # Limit extreme short-term predictions
+        max_move = min(max_daily_move * np.sqrt(horizon), 0.1)  # Cap at 10%, scale with sqrt of time
+        
+        # Verify we have a proper datetime index
+        if not isinstance(data.index, pd.DatetimeIndex):
+            raise ValueError("Data must have a DatetimeIndex")
+        
+        # Check data length
+        if len(data) < 50:
+            raise ValueError(
+                f"Insufficient data for prediction calculations.\n"
+                f"Got {len(data)} days, need at least 50.\n"
+                f"Date range: {data.index[0].strftime('%Y-%m-%d')} to {data.index[-1].strftime('%Y-%m-%d')}"
+            )
+        
+        # Check for required base columns first
+        base_columns = ['open', 'high', 'low', 'close', 'volume']
+        missing_base = [col for col in base_columns if col not in data.columns]
+        if missing_base:
+            raise ValueError(f"Missing required base columns: {missing_base}")
+            
+        # Now check technical indicators
+        required_indicators = ['RSI', 'MACD', 'OBV', 'ADX', 'volatility_20', 'volatility_50']
+        missing_indicators = [ind for ind in required_indicators if ind not in data.columns]
+        if missing_indicators:
+            raise ValueError(f"Missing technical indicators: {missing_indicators}")
+            
+        # Check for NaN values in the last row
+        last_row = data.iloc[-1]
+        nan_columns = last_row[last_row.isna()].index.tolist()
+        if nan_columns:
+            raise ValueError(f"NaN values found in latest data for columns: {nan_columns}")
+            
+        current_price = data['close'].iloc[-1]
+        
+        # 1. Trend Analysis
+        trend_score = self._calculate_trend_score(data)
+        
+        # 2. Momentum Analysis
+        momentum_score = self._calculate_momentum_score(data)
+        
+        # 3. Volatility Adjustment
+        volatility_factor = self._calculate_volatility_factor(data)
+        
+        # 4. Volume Analysis
+        volume_score = self._calculate_volume_score(data)
+        
+        # Enhanced price behavior analysis with support/resistance
+        windows = [5, 10, 20]  # Multiple timeframes for analysis
+        returns_analysis = {}
+        price_data = data['close']
+        
+        # Calculate support and resistance levels
+        recent_high = price_data.tail(20).max()
+        recent_low = price_data.tail(20).min()
+        current_price = price_data.iloc[-1]
+        
+        # Calculate price position relative to range
+        price_range = recent_high - recent_low
+        if price_range > 0:
+            range_position = (current_price - recent_low) / price_range  # 0 to 1
+        else:
+            range_position = 0.5
+            
+        for window in windows:
+            window_returns = data['returns'].tail(window)
+            window_prices = price_data.tail(window)
+            
+            # Exponential weights for returns
+            w = np.exp(np.linspace(-1, 0, len(window_returns)))
+            w /= w.sum()
+            
+            # Calculate price momentum and mean reversion signals
+            distance_from_mean = (current_price - window_prices.mean()) / window_prices.std()
+            
+            returns_analysis[window] = {
+                'weighted_return': (window_returns * w).sum(),
+                'trend_direction': np.sign(window_returns).mean(),
+                'volatility': window_returns.std(),
+                'mean_reversion': -np.clip(distance_from_mean * 0.1, -0.5, 0.5)  # Mean reversion signal
+            }
+        
+        # Combine multi-timeframe analysis
+        weighted_returns = sum(
+            analysis['weighted_return'] * (1.0 / window)
+            for window, analysis in returns_analysis.items()
+        )
+        
+        # Enhanced trend analysis with ADX weighting
+        adx = data['ADX'].iloc[-1]
+        atr = data['ATR'].iloc[-1]
+        rsi = data['RSI'].iloc[-1]
+        
+        # Calculate trend consistency across timeframes with ADX weighting
+        trend_directions = [analysis['trend_direction'] for analysis in returns_analysis.values()]
+        trend_consistency = np.mean([abs(d) for d in trend_directions])
+        
+        # ADX-based trend strength adjustment
+        trend_strength = min(adx / 25.0, 1.0)  # Normalize ADX (25+ indicates strong trend)
+        
+        # RSI-based momentum protection
+        rsi_factor = 1.0
+        if rsi > 70:  # Overbought
+            rsi_factor = max(0.5, (80 - rsi) / 10)  # Gradually reduce factor from 70-80
+        elif rsi < 30:  # Oversold
+            rsi_factor = max(0.5, (rsi - 20) / 10)  # Gradually reduce factor from 30-20
+            
+        # Volatility-based adjustment using ATR
+        volatility_adjustment = min(1.0, 1.5 * atr / current_price)
+        
+        # Detect potential trend reversals with enhanced protection
+        short_term_dir = np.sign(returns_analysis[5]['weighted_return']) * trend_strength * rsi_factor
+        long_term_dir = np.sign(returns_analysis[20]['weighted_return'])
+        potential_reversal = short_term_dir != long_term_dir
+        
+        # Dynamic weight adjustment based on market conditions and price position
+        base_weights = {
+            'trend': 0.25 * trend_strength,  # Weight by ADX-based trend strength
+            'momentum': 0.20 * rsi_factor,   # Adjust by RSI protection
+            'volume': 0.15,
+            'recent': 0.25 * volatility_adjustment,  # Adjust by ATR
+            'mean_reversion': 0.15  # Mean reversion component
+        }
+        
+        # Normalize weights to sum to 1
+        weight_sum = sum(base_weights.values())
+        base_weights = {k: v/weight_sum for k, v in base_weights.items()}
+        
+        # Adjust weights based on price position in range
+        if range_position > 0.8:  # Near resistance
+            mean_reversion_bias = -0.1  # Tendency to pull back
+            base_weights['mean_reversion'] += 0.1
+            base_weights['momentum'] -= 0.1
+        elif range_position < 0.2:  # Near support
+            mean_reversion_bias = 0.1   # Tendency to bounce
+            base_weights['mean_reversion'] += 0.1
+            base_weights['momentum'] -= 0.1
+        else:
+            mean_reversion_bias = 0
+        
+        # Adjust based on trend consistency
+        if trend_consistency > 0.7 and not potential_reversal:
+            if range_position > 0.5:  # Uptrend with room to run
+                base_weights['trend'] += 0.05
+                base_weights['recent'] += 0.05
+                base_weights['mean_reversion'] -= 0.1
+            else:  # Uptrend near support
+                base_weights['momentum'] += 0.05
+                base_weights['volume'] += 0.05
+        elif trend_consistency < 0.3:  # Mixed/choppy market
+            base_weights['mean_reversion'] += 0.1
+            base_weights['volume'] += 0.05
+            base_weights['trend'] -= 0.15
+        
+        # Calculate predicted change with all factors
+        predicted_change = base_change * trend_multiplier * momentum_factor
+        
+        # Calculate maximum allowed price movement
+        max_move = base_daily_limit * np.sqrt(horizon)  # Scale with square root of time
+        
+        # Apply dynamic limits based on market conditions
+        if predicted_change > 0:  # Upward prediction
+            if rsi > 70:  # Overbought
+                max_move *= 0.5  # Reduce upward potential
+            elif adx > 25 and trend_direction > 0:  # Strong uptrend
+                max_move *= 1.2  # Allow more upside
+        else:  # Downward prediction
+            if rsi < 30:  # Oversold
+                max_move *= 0.5  # Reduce downward potential
+            elif adx > 25 and trend_direction < 0:  # Strong downtrend
+                max_move *= 1.2  # Allow more downside
+                
+        # Apply final bounds
+        predicted_change = np.clip(predicted_change, -max_move, max_move)
+        
+        # Calculate final price
+        predicted_price = current_price * (1 + predicted_change)
+        
+        # Enhanced time-based dampening with ATR consideration
+        max_daily_move = data['ATR'].iloc[-1] * 1.5  # Use ATR to limit daily movement
+        base_horizon_factor = min(0.04, max_daily_move / current_price)  # Cap based on ATR
+        
+        # Adjust horizon factor based on market conditions
+        if adx > 25 and trend_consistency > 0.7 and range_position < 0.7:
+            horizon_factor = np.log(horizon + 1) * base_horizon_factor * min(1.1, adx/30)
+        else:
+            horizon_factor = np.log(horizon + 1) * base_horizon_factor * 0.8  # More conservative in weak trends
+            
+        # Dynamic market condition-based dampening
+        position_dampening = 1.0
+        
+        # RSI-based dampening
+        if rsi > 70:
+            position_dampening *= max(0.5, (80 - rsi) / 10)  # Gradually reduce as RSI goes above 70
+        elif rsi < 30:
+            position_dampening *= max(0.5, (rsi - 20) / 10)  # Gradually reduce as RSI goes below 30
+            
+        # ADX-based trend strength adjustment
+        if adx < 20:  # Weak trend
+            position_dampening *= 0.85  # Less conservative in weak trends
+        elif adx > 30:  # Strong trend
+            position_dampening *= min(1.5, adx/30)  # More aggressive in strong trends
+            
+        # Range position adjustment
+        if range_position > 0.8 and predicted_change > 0:
+            position_dampening *= 0.8  # Moderate resistance dampening
+        elif range_position < 0.2 and predicted_change < 0:
+            position_dampening *= 0.8  # Moderate support dampening
+            
+        # Enhanced volatility dampening
+        vol_dampening = 1 - (volatility_factor - 1) * 0.3
+        
+        # Price momentum adjustment
+        momentum_adjustment = 1.0
+        if weighted_returns > 0 and range_position < 0.7:
+            momentum_adjustment = 1.1  # Slight boost for positive momentum away from resistance
+        elif weighted_returns < 0 and range_position > 0.3:
+            momentum_adjustment = 0.9  # Reduction for negative momentum above support
+            
+                # Final scaling with all factors and enhanced short-term protection
+        predicted_change *= (
+            horizon_factor * 
+            position_dampening * 
+            vol_dampening * 
+            momentum_adjustment
+        )
+        
+        # Short-term trend protection
+        if horizon <= 5:
+            last_5_returns = data['returns'].tail(5)
+            consistent_direction = np.all(np.sign(last_5_returns) == np.sign(last_5_returns.iloc[-1]))
+            
+            if consistent_direction and np.sign(predicted_change) != np.sign(last_5_returns.iloc[-1]):
+                # If predicting against a consistent trend, reduce magnitude
+                predicted_change *= 0.3
+                
+            # Calculate price acceleration
+            returns_acceleration = np.diff(last_5_returns)
+            if len(returns_acceleration) >= 2:
+                if np.all(returns_acceleration > 0) and predicted_change < 0:
+                    # Accelerating upward trend but predicting down
+                    predicted_change *= 0.2
+                elif np.all(returns_acceleration < 0) and predicted_change > 0:
+                    # Accelerating downward trend but predicting up
+                    predicted_change *= 0.2
+        
+        # Short-term prediction validation
+        if horizon <= 5:
+            # Limit the maximum predicted change based on recent volatility
+            predicted_change = np.clip(predicted_change, -max_move, max_move)
+            
+            # Additional short-term validation
+            if abs(predicted_change) > 0.03:  # If predicting more than 3% move
+                # Check if technical signals support such a large move
+                signal_count = 0
+                
+                # RSI extreme
+                if predicted_change < 0 and rsi < 30: signal_count -= 1
+                if predicted_change > 0 and rsi > 70: signal_count -= 1
+                
+                # MACD confirmation
+                if predicted_change > 0 and macd > signal: signal_count += 1
+                if predicted_change < 0 and macd < signal: signal_count += 1
+                
+                # Trend strength
+                if abs(trend_strength) > 0.02:  # Strong trend
+                    if np.sign(trend_strength) == np.sign(predicted_change):
+                        signal_count += 1
+                    else:
+                        signal_count -= 1
+                
+                # ADX confirmation
+                if adx > 25:  # Strong trend
+                    if np.sign(trend_strength) == np.sign(predicted_change):
+                        signal_count += 1
+                    else:
+                        signal_count -= 1
+                
+                # Adjust prediction based on signal confirmation
+                if signal_count < 0:
+                    predicted_change *= 0.3  # Significantly reduce the predicted change
+                elif signal_count == 0:
+                    predicted_change *= 0.5  # Moderately reduce the predicted change
+                    
+            # Enhanced sanity checks for short-term predictions
+            if horizon <= 2:
+                # Very short-term absolute limits
+                max_change = 0.02  # 2% daily maximum
+                if abs(predicted_change) > max_change * horizon:
+                    predicted_change = np.sign(predicted_change) * max_change * horizon
+                    
+                # Additional validation
+                if predicted_change < 0:  # For downward predictions
+                    if rsi < 40:  # Not oversold
+                        predicted_change *= 0.5  # Reduce magnitude
+                    if trend_strength > 0 and adx > 20:  # Strong uptrend
+                        predicted_change *= 0.3  # Significantly reduce downward prediction
+                else:  # For upward predictions
+                    if rsi > 60:  # Not overbought
+                        predicted_change *= 0.5  # Reduce magnitude
+                    if trend_strength < 0 and adx > 20:  # Strong downtrend
+                        predicted_change *= 0.3  # Significantly reduce upward prediction
+        
+        # Final prediction validation and adjustment
+        final_change = predicted_change
+        
+        # Get current market conditions for final validation
+        current_rsi = data['RSI'].iloc[-1]
+        current_adx = data['ADX'].iloc[-1]
+        current_atr = data['ATR'].iloc[-1]
+        current_macd = data['MACD'].iloc[-1]
+        current_signal = data['Signal_Line'].iloc[-1]
+        
+        # Maximum allowed daily movement based on ATR
+        max_daily_move = min(0.02, 1.5 * current_atr / current_price)  # Cap at 2% or 1.5x ATR
+        
+        # Apply stronger restrictions for extreme predictions
+        if abs(final_change) > max_daily_move * horizon:
+            # Check if extreme move is justified
+            move_justified = (
+                (final_change > 0 and current_rsi < 70 and current_adx > 25 and current_macd > current_signal) or
+                (final_change < 0 and current_rsi > 30 and current_adx > 25 and current_macd < current_signal)
+            )
+            
+            if not move_justified:
+                # Limit the move to the maximum allowed
+                final_change = np.sign(final_change) * max_daily_move * horizon
+        
+        # Calculate final price with sanity check
+        final_price = current_price * (1 + final_change)
+        
+        # Ensure prediction stays within realistic bounds
+        max_move_allowed = current_price * (1 + max_daily_move * horizon)
+        min_move_allowed = current_price * (1 - max_daily_move * horizon)
+        
+        return np.clip(final_price, min_move_allowed, max_move_allowed)
+
+    def _calculate_trend_score(self, data: pd.DataFrame) -> float:
+        """Calculate trend score based on moving averages, ADX, and price structure."""
+        last_row = data.iloc[-1]
+        recent_data = data.tail(20)  # Last 20 days of data
+        
+        # Analyze price structure
+        highs = recent_data['high'].rolling(5).max()
+        lows = recent_data['low'].rolling(5).min()
+        
+        # Detect higher highs and higher lows (uptrend structure)
+        higher_highs = highs.is_monotonic_increasing
+        higher_lows = lows.is_monotonic_increasing
+        
+        # Moving average trends with enhanced analysis
+        current_price = last_row['close']
+        ma_trends = {
+            'short_term': (last_row['SMA_5'] > last_row['SMA_20'], 
+                         abs(last_row['SMA_5'] - last_row['SMA_20']) / last_row['SMA_20']),
+            'mid_term': (last_row['EMA_5'] > last_row['EMA_20'],
+                        abs(last_row['EMA_5'] - last_row['EMA_20']) / last_row['EMA_20']),
+            'long_term': (last_row['close'] > last_row['SMA_50'],
+                         abs(last_row['close'] - last_row['SMA_50']) / last_row['SMA_50']),
+            'ma_cross': (last_row['SMA_5'] > last_row['SMA_10'],
+                        abs(last_row['SMA_5'] - last_row['SMA_10']) / last_row['SMA_10'])
+        }
+        
+        # Dynamic weights based on trend strength
+        base_weights = {
+            'short_term': 0.30,
+            'mid_term': 0.25,
+            'long_term': 0.25,
+            'ma_cross': 0.20
+        }
+        
+        # Calculate trend score with magnitude adjustment
+        trend_score = sum(
+            (1 if trend[0] else -1) * trend[1] * base_weights[k]
+            for k, trend in ma_trends.items()
+        )
+        
+        # Price structure bonus
+        if higher_highs and higher_lows:
+            trend_score *= 1.2  # Strong uptrend structure
+        elif higher_lows:
+            trend_score *= 1.1  # Developing uptrend
+            
+        # ADX trend strength with refined scaling
+        adx = last_row['ADX']
+        if adx > 30:
+            adx_mult = 1.3      # Very strong trend (reduced from 1.5)
+        elif adx > 20:
+            adx_mult = 1.15     # Strong trend (reduced from 1.25)
+        elif adx > 15:
+            adx_mult = 1.0      # Moderate trend
+        else:
+            adx_mult = 0.85     # Weak trend (increased from 0.75)
+            
+        return trend_score * adx_mult
+
+    def _calculate_momentum_score(self, data: pd.DataFrame) -> float:
+        """Calculate momentum score based on RSI, MACD, and price momentum with enhanced protection."""
+        last_row = data.iloc[-1]
+        
+        # RSI signals with conservative bias
+        rsi = last_row['RSI']
+        if rsi < 30:          # Oversold
+            rsi_signal = 0.5   # Reduced from 1.0 to be more conservative
+        elif rsi < 40:        # Approaching oversold
+            rsi_signal = 0.3
+        elif rsi > 70:        # Overbought
+            rsi_signal = -0.5  # Reduced from -1.0 to be more conservative
+        elif rsi > 60:        # Approaching overbought
+            rsi_signal = -0.3
+        else:                 # Neutral with minimal bias
+            rsi_signal = (rsi - 50) / 40  # Further reduced sensitivity
+            
+        # MACD signals with trend confirmation
+        macd = last_row['MACD']
+        signal = last_row['Signal_Line']
+        macd_diff = macd - signal
+        
+        # Calculate MACD trend
+        macd_trend = np.sign(macd_diff)
+        macd_strength = min(abs(macd_diff) / max(abs(macd), 1e-5), 1.0)
+        
+        # Enhanced price momentum analysis
+        price_data = data['close']
+        momentum_periods = [5, 10, 20]  # Multiple timeframes
+        momentum_signals = []
+        
+        for period in momentum_periods:
+            momentum = price_data.pct_change(period).iloc[-1]
+            momentum_signals.append(np.clip(momentum * 20, -1, 1))
+        
+        # Weight recent momentum more heavily
+        momentum_weights = [0.5, 0.3, 0.2]  # More weight on recent momentum
+        price_signal = sum(sig * w for sig, w in zip(momentum_signals, momentum_weights))
+        
+        # Combine signals with dynamic weights based on market conditions
+        weights = {
+            'rsi': 0.25,
+            'macd': 0.35,
+            'price': 0.40  # Increased weight on price momentum
+        }
+        
+        # Adjust weights based on signal strength
+        if abs(rsi_signal) > 0.8:  # Strong RSI signal
+            weights['rsi'] += 0.1
+            weights['macd'] -= 0.05
+            weights['price'] -= 0.05
+        elif abs(macd_strength) > 0.8:  # Strong MACD signal
+            weights['macd'] += 0.1
+            weights['rsi'] -= 0.05
+            weights['price'] -= 0.05
+            
+        momentum_score = (
+            rsi_signal * weights['rsi'] + 
+            macd_trend * macd_strength * weights['macd'] + 
+            price_signal * weights['price']
+        )
+        
+        return np.clip(momentum_score, -1, 1)
+        rsi = last_row['RSI']
+        rsi_score = (rsi - 50) / 50  # Normalize to [-1, 1]
+        
+        # MACD signal
+        macd = last_row['MACD']
+        macd_score = np.sign(macd) * min(abs(macd) / 2, 1)
+        
+        return (rsi_score + macd_score) / 2
+
+    def _calculate_volatility_factor(self, data: pd.DataFrame) -> float:
+        """Calculate volatility adjustment factor."""
+        last_row = data.iloc[-1]
+        recent_volatility = last_row['volatility_20']
+        longer_volatility = last_row['volatility_50']
+        
+        # Adjust prediction confidence based on volatility
+        if recent_volatility > longer_volatility * 1.5:
+            return 0.7  # High volatility - reduce prediction magnitude
+        elif recent_volatility < longer_volatility * 0.5:
+            return 1.2  # Low volatility - increase prediction magnitude
+        else:
+            return 1.0
+
+    def _calculate_volume_score(self, data: pd.DataFrame) -> float:
+        """Calculate volume-based score using OBV."""
+        obv = data['OBV'].iloc[-20:] # Last 20 days
+        obv_trend = np.polyfit(range(len(obv)), obv, 1)[0]
+        
+        return np.clip(obv_trend / abs(obv.mean()) * 5, -1, 1)

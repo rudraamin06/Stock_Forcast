@@ -22,9 +22,16 @@ Dependencies:
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from datetime import date
+from datetime import date, datetime
 import pandas as pd
 import yfinance as yf
+import logging
+from prediction import generate_price_prediction
+from backtesting import PredictionBacktester
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 # Initialize FastAPI application with title
 app = FastAPI(title="Stock API")
@@ -171,6 +178,10 @@ def load_prices(ticker: str, period: str = "2y") -> pd.DataFrame:
     # Apply the column renaming
     result.columns = [column_mapping.get(col, col) for col in result.columns]
     
+    # Convert date column to datetime and set as index
+    result['date'] = pd.to_datetime(result['date'])
+    result = result.set_index('date')
+    
     # For shorter time periods, ensure data quality
     if period in ["1d", "1w", "1mo"]:
         # Remove any rows with NaN (missing) values
@@ -179,6 +190,9 @@ def load_prices(ticker: str, period: str = "2y") -> pd.DataFrame:
         # Ensure we have at least some data points
         if len(result) == 0:
             print(f"No data points for {period}, this might indicate an issue with the interval")
+    
+    # Sort index to ensure data is in chronological order
+    result = result.sort_index()
     
     return result
 
@@ -227,19 +241,19 @@ def history(
     
     # Convert DataFrame to list of dictionaries for JSON serialization
     points = []
-    for _, row in df.iterrows():
-        point = {"date": str(row["date"])}
+    for index, row in df.iterrows():
+        point = {"date": str(index)}
         
         # Add all available fields (some stocks might not have all data)
-        if "close" in row:
+        if "close" in df.columns:
             point["close"] = float(row["close"])
-        if "open" in row:
+        if "open" in df.columns:
             point["open"] = float(row["open"])
-        if "high" in row:
+        if "high" in df.columns:
             point["high"] = float(row["high"])
-        if "low" in row:
+        if "low" in df.columns:
             point["low"] = float(row["low"])
-        if "volume" in row:
+        if "volume" in df.columns:
             point["volume"] = int(row["volume"])
         
         points.append(point)
@@ -276,6 +290,115 @@ def get_interval_for_period(period: str) -> str:
         "max": "1 day"
     }
     return interval_mapping.get(period, "1 day")
+
+@app.get("/predict")
+def predict_price(
+    ticker: str = Query(..., min_length=1, max_length=10),
+    target_date: str = Query(..., regex="^\d{4}-\d{2}-\d{2}$")
+):
+    """
+    Predict stock price for a given date using enhanced backtested strategy.
+    
+    Args:
+        ticker (str): Stock symbol (e.g., 'AAPL', 'MSFT')
+        target_date (str): Target date for prediction (YYYY-MM-DD format)
+        
+    Returns:
+        dict: Prediction results including:
+            - Current price
+            - Median prediction
+            - Confidence intervals
+            - Historical accuracy metrics
+    """
+    try:
+        logger.info(f"Receiving prediction request for {ticker} on {target_date}")
+        
+        # Convert target_date string to datetime
+        target_dt = datetime.strptime(target_date, "%Y-%m-%d")
+        
+        # Ensure target date is in the future
+        if target_dt <= datetime.now():
+            raise HTTPException(400, "Target date must be in the future")
+        
+        # Get 6 months of historical data for prediction
+        logger.debug(f"Fetching historical data for {ticker}")
+        historical_data = load_prices(ticker.upper(), "6mo")
+        
+        if historical_data.empty:
+            raise HTTPException(400, f"No historical data available for {ticker}")
+        
+        logger.debug(f"Retrieved {len(historical_data)} days of data from {historical_data.index[0]} to {historical_data.index[-1]}")
+        logger.debug(f"Available columns: {list(historical_data.columns)}")
+        
+        # Get the current (latest) price
+        current_price = historical_data['close'].iloc[-1]
+        logger.debug(f"Current price for {ticker}: {current_price}")
+        
+        # Check for NaN values
+        nan_cols = historical_data.columns[historical_data.isna().any()].tolist()
+        if nan_cols:
+            logger.warning(f"NaN values found in columns: {nan_cols}")
+        
+        # Initialize backtester to calculate technical indicators
+        logger.debug("Initializing backtester and calculating technical indicators")
+        backtester = PredictionBacktester(historical_data)
+        processed_data = backtester.data
+        
+        # Generate prediction using the processed data
+        logger.debug("Generating prediction using backtested model")
+        prediction = generate_price_prediction(processed_data, target_dt, current_price)
+        logger.debug(f"Raw prediction generated: {prediction}")
+        
+        if not isinstance(prediction, dict):
+            raise ValueError("Prediction must return a dictionary")
+        logger.info(f"Prediction generated successfully for {ticker}")
+        
+        return {
+            "ticker": ticker.upper(),
+            "prediction": prediction
+        }
+        
+    except ValueError as e:
+        logger.error(f"ValueError in prediction: {str(e)}")
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.error(f"Error in prediction: {str(e)}")
+        raise HTTPException(500, f"Prediction failed: {str(e)}")
+
+@app.get("/advanced_prediction/{ticker}")
+async def get_advanced_prediction(ticker: str, target_date: str):
+    """
+    Get advanced stock price prediction including:
+    - Median prediction
+    - Confidence intervals (80% and 95%)
+    - Probability estimates
+    """
+    try:
+        # Convert target_date string to datetime
+        target_dt = datetime.strptime(target_date, "%Y-%m-%d")
+        
+        # Ensure target date is in the future
+        if target_dt <= datetime.now():
+            raise HTTPException(400, "Target date must be in the future")
+            
+        # Load 6 months of historical data for prediction
+        df = load_prices(ticker.upper(), "6mo")
+        
+        # Get the current (latest) price
+        current_price = df['close'].iloc[-1]
+        
+        # Generate prediction
+        prediction = generate_price_prediction(df, target_dt, current_price)
+        
+        return {
+            "ticker": ticker.upper(),
+            "prediction": prediction
+        }
+        
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"Prediction failed: {str(e)}")
 
 @app.get("/intraday")
 def intraday(
